@@ -11,9 +11,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'dry_run=選ぶだけ / check=鍵と権限の確認 / post=今すぐ投稿'
+        description: 'dry_run=選ぶだけ / check=鍵と権限の確認 / post=今すぐ投稿 / notify_test=LINE通知のテスト'
         type: choice
-        options: [dry_run, check, post]
+        options: [dry_run, check, post, notify_test]
         default: dry_run
 
 permissions:
@@ -33,10 +33,13 @@ jobs:
         env:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+          NOTIFY_TEST: ${{ github.event.inputs.mode == 'notify_test' && '1' || '' }}
         run: |
           case "${{ github.event.inputs.mode }}" in
             dry_run) python3 post_story.py --dry-run --force ;;
-            check)   python3 post_story.py --check ;;
+            check|notify_test) python3 post_story.py --check ;;
             post)    python3 post_story.py --force ;;
             *)       python3 post_story.py ;;
           esac

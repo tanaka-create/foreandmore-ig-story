@@ -8,9 +8,13 @@
 - expires を過ぎたセット（10月キャンペーンなど）は選ばない
 - 1日1回だけ出す。投稿済みかどうかは history.json で判定する
 
+鍵（トークン）の期限が残り7日・3日・1日になった朝と、投稿に失敗したときは
+LINE（saki's AI →「わたしのしごと」グループ）にお知らせを送る。
+
 必要な環境変数（GitHub Secrets）:
     IG_ACCESS_TOKEN   instagram_content_publish 権限つきのトークン
     IG_USER_ID        @foreandmore_kurume の Instagram ユーザーID
+    LINE_CHANNEL_ACCESS_TOKEN / LINE_GROUP_ID   お知らせ用（なくても投稿は動く）
 """
 
 from __future__ import annotations
@@ -64,6 +68,56 @@ def api(method: str, path: str, token: str, **params) -> dict:
         raise RuntimeError(f"{path}: {msg}") from None
 
 
+NOTIFY_DAYS = (7, 3, 1)  # 期限の何日前にお知らせするか
+
+RENEW_HOWTO = (
+    "【更新のしかた】\n"
+    "ビジネス設定 → システムユーザー「test」→ トークンを生成\n"
+    "→ インスタ分析用アプリ → 60日間 → 権限5件（instagram_content_publish 入り）\n"
+    "→ GitHub の foreandmore-ig-story の Secrets「IG_ACCESS_TOKEN」に上書き登録\n"
+    "わからなければClaudeに「ストーリーの鍵を更新したい」と言えばOKです"
+)
+
+
+def line_notify(text: str) -> None:
+    token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
+    to = os.environ.get("LINE_GROUP_ID", "")
+    if not token or not to:
+        print("[WARN] LINE の設定がないので通知を送れない")
+        return
+    body = json.dumps({"to": to, "messages": [{"type": "text", "text": text}]}).encode()
+    req = Request("https://api.line.me/v2/bot/message/push", data=body, method="POST",
+                  headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"})
+    try:
+        urlopen(req, timeout=30).read()
+        print("[INFO] LINE に通知した")
+    except HTTPError as e:
+        print(f"[WARN] LINE 通知に失敗: {e.code}")
+
+
+def token_days_left(token: str) -> int | None:
+    """トークンの残り日数。無期限なら None。"""
+    info = api("GET", "debug_token", token, input_token=token).get("data", {})
+    exp = info.get("data_access_expires_at") if not info.get("expires_at") else info.get("expires_at")
+    if not exp:
+        return None
+    left = dt.datetime.fromtimestamp(exp, JST) - now()
+    return left.days
+
+
+def check_expiry(token: str, force_notify: bool = False) -> int | None:
+    try:
+        left = token_days_left(token)
+    except Exception as exc:
+        print(f"[WARN] 期限の確認に失敗: {exc}")
+        return None
+    print(f"[INFO] 鍵の残り日数: {left if left is not None else '無期限'}")
+    if left is not None and (left in NOTIFY_DAYS or left <= 0 or force_notify):
+        when = "今日で切れます" if left <= 0 else f"あと{left}日で切れます"
+        line_notify(f"📸 フォア＆モアのストーリー自動投稿\nInstagramの鍵（トークン）が{when}。\n切れると毎朝のストーリーが止まるので、更新をお願いします🙏\n\n{RENEW_HOWTO}")
+    return left
+
+
 def pick(sets: dict, history: list, today: dt.date) -> list[str]:
     recent = {k for h in history[-AVOID_DAYS:] for k in h["sets"]}
     alive = [k for k, v in sets.items()
@@ -101,6 +155,7 @@ def main() -> int:
         print("[CHECK] 接続先:", me.get("username"))
         lim = api("GET", f"{user_id}/content_publishing_limit", token, fields="quota_usage,config")
         print("[CHECK] 投稿権限OK・24時間の投稿上限:", lim.get("data", [{}])[0])
+        check_expiry(token, force_notify=os.environ.get("NOTIFY_TEST") == "1")
         return 0 if me.get("username") == EXPECTED_USERNAME else 1
 
     t = now()
@@ -140,7 +195,12 @@ def main() -> int:
     if not token or not user_id:
         print("[ERROR] IG_ACCESS_TOKEN / IG_USER_ID が未設定", file=sys.stderr)
         return 1
-    me = api("GET", user_id, token, fields="username")
+    check_expiry(token)
+    try:
+        me = api("GET", user_id, token, fields="username")
+    except Exception as exc:
+        line_notify(f"⚠️ フォア＆モアのストーリー自動投稿が止まりました\nInstagramにつながりませんでした（鍵の期限切れの可能性があります）。\n{exc}\n\n{RENEW_HOWTO}")
+        raise
     if me.get("username") != EXPECTED_USERNAME:
         print(f"[ERROR] 接続先が違う: {me.get('username')}", file=sys.stderr)
         return 1
@@ -153,6 +213,9 @@ def main() -> int:
                 posted.append({"file": f, "id": mid})
                 print(f"[OK] {f} → {mid}")
                 time.sleep(5)
+    except Exception as exc:
+        line_notify(f"⚠️ フォア＆モアのストーリー自動投稿で失敗しました\n{len(posted)}枚出したところで止まっています。\n{exc}\n\n鍵の期限切れなら↓\n{RENEW_HOWTO}")
+        raise
     finally:
         if posted:
             history.append({"date": today.isoformat(), "time": now().strftime("%H:%M"),
