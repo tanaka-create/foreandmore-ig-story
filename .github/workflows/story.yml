@@ -10,6 +10,11 @@ on:
     - cron: '10 0 * * 1-6'    # 09:10 JST 予備
   workflow_dispatch:
     inputs:
+      account:
+        description: 'どの店舗で動かすか'
+        type: choice
+        options: [kurume, chikugo]
+        default: kurume
       mode:
         description: 'dry_run=選ぶだけ / check=鍵と権限の確認 / post=今すぐ投稿 / notify_test=LINE通知のテスト'
         type: choice
@@ -25,6 +30,7 @@ concurrency:
 
 jobs:
   post:
+    if: github.event_name == 'schedule' || github.event.inputs.account == 'kurume'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -51,4 +57,38 @@ jobs:
           git add history.json 2>/dev/null || true
           git diff --staged --quiet && exit 0
           git commit -m "ストーリー投稿 $(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M')"
+          git push origin main || (git pull --rebase origin main && git push origin main)
+
+  chikugo:
+    # 筑後店。リポジトリ変数 CHIKUGO_ENABLED を true にすると定時投稿が動く
+    if: always() && ((github.event_name == 'schedule' && vars.CHIKUGO_ENABLED == 'true') || github.event.inputs.account == 'chikugo')
+    needs: post
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: 筑後のストーリーを投稿する
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID_CHIKUGO: ${{ secrets.IG_USER_ID_CHIKUGO }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+        run: |
+          git pull -q origin main || true
+          case "${{ github.event.inputs.mode }}" in
+            dry_run) python3 post_story.py --account chikugo --dry-run --force ;;
+            check|notify_test) python3 post_story.py --account chikugo --check ;;
+            post)    python3 post_story.py --account chikugo --force ;;
+            *)       python3 post_story.py --account chikugo ;;
+          esac
+      - name: 投稿記録をコミットする
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add history_chikugo.json 2>/dev/null || true
+          git diff --staged --quiet && exit 0
+          git commit -m "筑後ストーリー投稿 $(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M')"
           git push origin main || (git pull --rebase origin main && git push origin main)

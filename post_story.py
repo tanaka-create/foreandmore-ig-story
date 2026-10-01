@@ -32,18 +32,22 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 BASE = Path(__file__).resolve().parent
-SETS = BASE / "sets.json"
-HISTORY = BASE / "history.json"
+# 店舗ごとの設定。--account で切り替える
+ACCOUNTS = {
+    "kurume": {"sets": "sets.json", "history": "history.json", "images": "images/",
+               "username": "foreandmore_kurume", "user_id_env": "IG_USER_ID", "label": "久留米"},
+    "chikugo": {"sets": "sets_chikugo.json", "history": "history_chikugo.json", "images": "images_chikugo/",
+                "username": "foreandmorechikugo", "user_id_env": "IG_USER_ID_CHIKUGO", "label": "筑後"},
+}
 JST = dt.timezone(dt.timedelta(hours=9))
 API = "https://graph.facebook.com/v22.0"
 # 画像は公開リポジトリの raw URL から Instagram に取り込ませる
-RAW_BASE = "https://raw.githubusercontent.com/tanaka-create/foreandmore-ig-story/main/images/"
+RAW_ROOT = "https://raw.githubusercontent.com/tanaka-create/foreandmore-ig-story/main/"
 
 POST_HOUR = 6          # 6:00 JST に出す
 SETS_PER_DAY = 2
 AVOID_DAYS = 6         # 直近6投稿日に出したセットは避ける
 LATEST_HOUR = 12       # cron が大幅に遅れてもこの時刻を過ぎたら出さない
-EXPECTED_USERNAME = "foreandmore_kurume"
 
 
 def now() -> dt.datetime:
@@ -145,12 +149,19 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true", help="選ぶだけで投稿しない")
     ap.add_argument("--check", action="store_true", help="鍵と投稿権限の確認だけ行う（投稿しない）")
+    ap.add_argument("--account", default="kurume", choices=list(ACCOUNTS), help="どの店舗に出すか")
     ap.add_argument("--force", action="store_true", help="時刻・曜日・投稿済みの判定を無視する（手動テスト用）")
     args = ap.parse_args()
+    acc = ACCOUNTS[args.account]
+    global SETS, HISTORY, RAW_BASE, EXPECTED_USERNAME
+    SETS, HISTORY = BASE / acc["sets"], BASE / acc["history"]
+    RAW_BASE = RAW_ROOT + acc["images"]
+    EXPECTED_USERNAME = acc["username"]
+    print(f"[INFO] 店舗: {acc['label']}（@{EXPECTED_USERNAME}）")
 
     if args.check:
         token = os.environ.get("IG_ACCESS_TOKEN", "")
-        user_id = os.environ.get("IG_USER_ID", "")
+        user_id = os.environ.get(acc["user_id_env"], "")
         me = api("GET", user_id, token, fields="username")
         print("[CHECK] 接続先:", me.get("username"))
         lim = api("GET", f"{user_id}/content_publishing_limit", token, fields="quota_usage,config")
@@ -191,15 +202,16 @@ def main() -> int:
         return 0
 
     token = os.environ.get("IG_ACCESS_TOKEN", "")
-    user_id = os.environ.get("IG_USER_ID", "")
+    user_id = os.environ.get(acc["user_id_env"], "")
     if not token or not user_id:
-        print("[ERROR] IG_ACCESS_TOKEN / IG_USER_ID が未設定", file=sys.stderr)
+        print(f"[ERROR] IG_ACCESS_TOKEN / {acc['user_id_env']} が未設定", file=sys.stderr)
         return 1
-    check_expiry(token)
+    if args.account == "kurume":  # 鍵は両店舗共通なので、期限のお知らせは久留米の回だけで送る
+        check_expiry(token)
     try:
         me = api("GET", user_id, token, fields="username")
     except Exception as exc:
-        line_notify(f"⚠️ フォア＆モアのストーリー自動投稿が止まりました\nInstagramにつながりませんでした（鍵の期限切れの可能性があります）。\n{exc}\n\n{RENEW_HOWTO}")
+        line_notify(f"⚠️ フォア＆モア{acc['label']}店のストーリー自動投稿が止まりました\nInstagramにつながりませんでした（鍵の期限切れの可能性があります）。\n{exc}\n\n{RENEW_HOWTO}")
         raise
     if me.get("username") != EXPECTED_USERNAME:
         print(f"[ERROR] 接続先が違う: {me.get('username')}", file=sys.stderr)
@@ -214,7 +226,7 @@ def main() -> int:
                 print(f"[OK] {f} → {mid}")
                 time.sleep(5)
     except Exception as exc:
-        line_notify(f"⚠️ フォア＆モアのストーリー自動投稿で失敗しました\n{len(posted)}枚出したところで止まっています。\n{exc}\n\n鍵の期限切れなら↓\n{RENEW_HOWTO}")
+        line_notify(f"⚠️ フォア＆モア{acc['label']}店のストーリー自動投稿で失敗しました\n{len(posted)}枚出したところで止まっています。\n{exc}\n\n鍵の期限切れなら↓\n{RENEW_HOWTO}")
         raise
     finally:
         if posted:
