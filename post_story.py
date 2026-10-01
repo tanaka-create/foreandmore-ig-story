@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """フォア＆モア久留米の Instagram ストーリーを自動投稿する。
 
-毎朝6時（日曜休み）に、sets.json の中からランダムに2セット（各4枚）を選び、
+毎朝6時（日曜休み）に、sets.json の中からランダムに1セット（4枚）を選び、
 1→4枚目の順でストーリーに投稿する。
 
 - 直近6投稿日に出したセットは選ばない（同じものが続かないように）
@@ -45,7 +45,7 @@ API = "https://graph.facebook.com/v22.0"
 RAW_ROOT = "https://raw.githubusercontent.com/tanaka-create/foreandmore-ig-story/main/"
 
 POST_HOUR = 6          # 6:00 JST に出す
-SETS_PER_DAY = 2
+SETS_PER_DAY = 1  # 2026-10-02 本人指示で2→1セットに変更
 AVOID_DAYS = 6         # 直近6投稿日に出したセットは避ける
 LATEST_HOUR = 12       # cron が大幅に遅れてもこの時刻を過ぎたら出さない
 
