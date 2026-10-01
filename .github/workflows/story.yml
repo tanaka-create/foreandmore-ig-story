@@ -10,10 +10,11 @@ on:
     - cron: '10 0 * * 1-6'    # 09:10 JST 予備
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: '投稿せず選ぶだけ'
-        type: boolean
-        default: true
+      mode:
+        description: 'dry_run=選ぶだけ / check=鍵と権限の確認 / post=今すぐ投稿'
+        type: choice
+        options: [dry_run, check, post]
+        default: dry_run
 
 permissions:
   contents: write
@@ -33,11 +34,12 @@ jobs:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
         run: |
-          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-            python3 post_story.py --dry-run --force
-          else
-            python3 post_story.py
-          fi
+          case "${{ github.event.inputs.mode }}" in
+            dry_run) python3 post_story.py --dry-run --force ;;
+            check)   python3 post_story.py --check ;;
+            post)    python3 post_story.py --force ;;
+            *)       python3 post_story.py ;;
+          esac
       - name: 投稿記録をコミットする
         if: always()
         run: |

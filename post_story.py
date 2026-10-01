@@ -90,8 +90,18 @@ def post_image(token: str, user_id: str, url: str) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true", help="選ぶだけで投稿しない")
+    ap.add_argument("--check", action="store_true", help="鍵と投稿権限の確認だけ行う（投稿しない）")
     ap.add_argument("--force", action="store_true", help="時刻・曜日・投稿済みの判定を無視する（手動テスト用）")
     args = ap.parse_args()
+
+    if args.check:
+        token = os.environ.get("IG_ACCESS_TOKEN", "")
+        user_id = os.environ.get("IG_USER_ID", "")
+        me = api("GET", user_id, token, fields="username")
+        print("[CHECK] 接続先:", me.get("username"))
+        lim = api("GET", f"{user_id}/content_publishing_limit", token, fields="quota_usage,config")
+        print("[CHECK] 投稿権限OK・24時間の投稿上限:", lim.get("data", [{}])[0])
+        return 0 if me.get("username") == EXPECTED_USERNAME else 1
 
     t = now()
     today = t.date()
