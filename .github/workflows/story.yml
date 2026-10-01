@@ -1,0 +1,49 @@
+name: フォア＆モア ストーリー自動投稿
+
+# 毎朝 6:00 JST に2セット（日曜休み）。cron は UTC なので JST から9時間引いている。
+# cron は遅れることがあるので 5:40 に起動して 6:00 まで待ち、遅れた日用に予備の起動も入れている
+# （予備で起動しても、その日すでに出していれば何もしない）。
+on:
+  schedule:
+    - cron: '40 20 * * 0-5'   # 05:40 JST（月〜土）
+    - cron: '10 22 * * 0-5'   # 07:10 JST 予備
+    - cron: '10 0 * * 1-6'    # 09:10 JST 予備
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '投稿せず選ぶだけ'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: story-post
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: ストーリーを投稿する
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            python3 post_story.py --dry-run --force
+          else
+            python3 post_story.py
+          fi
+      - name: 投稿記録をコミットする
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add history.json 2>/dev/null || true
+          git diff --staged --quiet && exit 0
+          git commit -m "ストーリー投稿 $(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M')"
+          git push origin main || (git pull --rebase origin main && git push origin main)
