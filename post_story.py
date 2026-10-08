@@ -7,6 +7,7 @@
 - 直近6投稿日に出したセットは選ばない（同じものが続かないように）
 - expires を過ぎたセット（10月キャンペーンなど）は選ばない
 - 1日1回だけ出す。投稿済みかどうかは history.json で判定する
+- 途中で失敗した日は、次の起動（予備の起動）で残りの枚数だけ続きから出す
 
 鍵（トークン）の期限が残り7日・3日・1日になった朝と、投稿に失敗したときは
 LINE（saki's AI →「わたしのしごと」グループ）にお知らせを送る。
@@ -132,7 +133,7 @@ def pick(sets: dict, history: list, today: dt.date) -> list[str]:
     return random.sample(pool, SETS_PER_DAY)
 
 
-def post_image(token: str, user_id: str, url: str) -> str:
+def post_image_once(token: str, user_id: str, url: str) -> str:
     c = api("POST", f"{user_id}/media", token, image_url=url, media_type="STORIES")
     cid = c["id"]
     for _ in range(30):
@@ -143,6 +144,54 @@ def post_image(token: str, user_id: str, url: str) -> str:
             raise RuntimeError(f"画像の取り込みに失敗: {url}")
         time.sleep(3)
     return api("POST", f"{user_id}/media_publish", token, creation_id=cid)["id"]
+
+
+def post_image(token: str, user_id: str, url: str, tries: int = 3) -> str:
+    """Meta 側の一時エラー（"The requested resource does not exist" など）に備えて、
+    少し待ってから取り込みからやり直す。"""
+    for i in range(1, tries + 1):
+        try:
+            return post_image_once(token, user_id, url)
+        except RuntimeError as exc:
+            if i == tries:
+                raise
+            print(f"[WARN] {i}回目失敗、30秒後にやり直す: {exc}")
+            time.sleep(30)
+
+
+def connect(acc: dict) -> tuple[str, str]:
+    token = os.environ.get("IG_ACCESS_TOKEN", "")
+    user_id = os.environ.get(acc["user_id_env"], "")
+    if not token or not user_id:
+        raise SystemExit(f"[ERROR] IG_ACCESS_TOKEN / {acc['user_id_env']} が未設定")
+    try:
+        me = api("GET", user_id, token, fields="username")
+    except Exception as exc:
+        line_notify(f"⚠️ フォア＆モア{acc['label']}店のストーリー自動投稿が止まりました\nInstagramにつながりませんでした（鍵の期限切れの可能性があります）。\n{exc}\n\n{RENEW_HOWTO}")
+        raise
+    if me.get("username") != EXPECTED_USERNAME:
+        raise SystemExit(f"[ERROR] 接続先が違う: {me.get('username')}")
+    return token, user_id
+
+
+def resume(acc: dict, entry: dict, files: list[str], history: list) -> int:
+    """途中で止まった今日の分の続きを出す（予備の起動で自動的に拾う）。"""
+    rest = files[entry["posted"]:]
+    print(f"[INFO] 今日の分が{entry['posted']}/{len(files)}枚で止まっているので続きを出す: {', '.join(rest)}")
+    token, user_id = connect(acc)
+    try:
+        for f in rest:
+            mid = post_image(token, user_id, RAW_BASE + f)
+            entry["posted"] += 1
+            print(f"[OK] {f} → {mid}")
+            time.sleep(5)
+    except Exception as exc:
+        line_notify(f"⚠️ フォア＆モア{acc['label']}店のストーリー、続きの投稿も失敗しました\n{entry['posted']}/{len(files)}枚まで出ています。次の予備の起動でもう一度試します。\n{exc}")
+        raise
+    finally:
+        HISTORY.write_text(json.dumps(history, ensure_ascii=False, indent=1), encoding="utf-8")
+    line_notify(f"✅ フォア＆モア{acc['label']}店のストーリー、止まっていた続き（{len(rest)}枚）を出しました")
+    return 0
 
 
 def main() -> int:
@@ -174,6 +223,13 @@ def main() -> int:
     sets = load(SETS, {})
     history = load(HISTORY, [])
 
+    # 今日の分が途中で止まっていたら、残りの枚数だけ続きから出す
+    todays = next((h for h in history if h["date"] == today.isoformat()), None)
+    if todays:
+        files = [f for k in todays["sets"] for f in sets[k]["files"]]
+        if todays.get("posted", len(files)) < len(files) and not args.dry_run:
+            return resume(acc, todays, files, history)
+
     if not args.force:
         if t.weekday() == 6:
             print("[SKIP] 日曜は投稿しない")
@@ -201,21 +257,9 @@ def main() -> int:
                 print("  ", RAW_BASE + f)
         return 0
 
-    token = os.environ.get("IG_ACCESS_TOKEN", "")
-    user_id = os.environ.get(acc["user_id_env"], "")
-    if not token or not user_id:
-        print(f"[ERROR] IG_ACCESS_TOKEN / {acc['user_id_env']} が未設定", file=sys.stderr)
-        return 1
+    token, user_id = connect(acc)
     if args.account == "kurume":  # 鍵は両店舗共通なので、期限のお知らせは久留米の回だけで送る
         check_expiry(token)
-    try:
-        me = api("GET", user_id, token, fields="username")
-    except Exception as exc:
-        line_notify(f"⚠️ フォア＆モア{acc['label']}店のストーリー自動投稿が止まりました\nInstagramにつながりませんでした（鍵の期限切れの可能性があります）。\n{exc}\n\n{RENEW_HOWTO}")
-        raise
-    if me.get("username") != EXPECTED_USERNAME:
-        print(f"[ERROR] 接続先が違う: {me.get('username')}", file=sys.stderr)
-        return 1
 
     posted = []
     try:
