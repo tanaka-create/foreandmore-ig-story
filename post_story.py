@@ -230,6 +230,7 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true", help="選ぶだけで投稿しない")
     ap.add_argument("--check", action="store_true", help="鍵と投稿権限の確認だけ行う（投稿しない）")
     ap.add_argument("--account", default="kurume", choices=list(ACCOUNTS), help="どの店舗に出すか")
+    ap.add_argument("--only", help="この1枚だけ出し直す（例: H/H4.jpg）。投稿記録は変えない")
     ap.add_argument("--force", action="store_true", help="時刻・曜日・投稿済みの判定を無視する（手動テスト用）")
     args = ap.parse_args()
     acc = ACCOUNTS[args.account]
@@ -238,6 +239,12 @@ def main() -> int:
     RAW_BASE = RAW_ROOT + acc["images"]
     EXPECTED_USERNAME = acc["username"]
     print(f"[INFO] 店舗: {acc['label']}（@{EXPECTED_USERNAME}）")
+
+    if args.only:
+        token, user_id = connect(acc)
+        mid = post_image(token, user_id, image_url(args.only))
+        print(f"[OK] 出し直し {args.only} → {mid}")
+        return 0
 
     if args.check:
         token = os.environ.get("IG_ACCESS_TOKEN", "")
