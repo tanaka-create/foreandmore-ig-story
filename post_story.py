@@ -42,8 +42,11 @@ ACCOUNTS = {
 }
 JST = dt.timezone(dt.timedelta(hours=9))
 API = "https://graph.facebook.com/v22.0"
-# 画像は公開リポジトリの raw URL から Instagram に取り込ませる
+# 画像は公開リポジトリの URL から Instagram に取り込ませる。
+# raw URL は途中で切れることがあり、下半分が灰色の画像が出た（2026-10-22 筑後H4）。
+# そのため jsDelivr（配信用CDN・コミット固定）を優先し、事前に全体が取れるか確かめてから渡す
 RAW_ROOT = "https://raw.githubusercontent.com/tanaka-create/foreandmore-ig-story/main/"
+CDN_ROOT = "https://cdn.jsdelivr.net/gh/tanaka-create/foreandmore-ig-story@{sha}/"
 
 POST_HOUR = 6          # 6:00 JST に出す
 SETS_PER_DAY = 1  # 2026-10-02 本人指示で2→1セットに変更
@@ -133,6 +136,34 @@ def pick(sets: dict, history: list, today: dt.date) -> list[str]:
     return random.sample(pool, SETS_PER_DAY)
 
 
+def commit_sha() -> str | None:
+    try:
+        import subprocess
+        return subprocess.run(["git", "rev-parse", "HEAD"], cwd=BASE, capture_output=True,
+                              text=True, check=True).stdout.strip() or None
+    except Exception:
+        return None
+
+
+def image_url(f: str) -> str:
+    """手元の画像と1バイトも違わずに取れるURLを返す（途中で切れたURLは渡さない）。"""
+    rel = RAW_BASE[len(RAW_ROOT):] + f
+    local = (BASE / rel).read_bytes()
+    sha = commit_sha()
+    urls = ([CDN_ROOT.format(sha=sha) + rel] if sha else []) + [RAW_ROOT + rel]
+    for url in urls:
+        for i in range(3):
+            try:
+                with urlopen(Request(url, headers={"User-Agent": "foreandmore-story"}), timeout=60) as r:
+                    if r.read() == local:
+                        return url
+                print(f"[WARN] 画像が途中で切れていた（{i + 1}回目）: {url}")
+            except Exception as exc:
+                print(f"[WARN] 画像の確認に失敗（{i + 1}回目）: {url} {exc}")
+            time.sleep(5)
+    raise RuntimeError(f"画像を完全な形で取得できるURLがない: {rel}")
+
+
 def post_image_once(token: str, user_id: str, url: str) -> str:
     c = api("POST", f"{user_id}/media", token, image_url=url, media_type="STORIES")
     cid = c["id"]
@@ -181,7 +212,7 @@ def resume(acc: dict, entry: dict, files: list[str], history: list) -> int:
     token, user_id = connect(acc)
     try:
         for f in rest:
-            mid = post_image(token, user_id, RAW_BASE + f)
+            mid = post_image(token, user_id, image_url(f))
             entry["posted"] += 1
             print(f"[OK] {f} → {mid}")
             time.sleep(5)
@@ -265,7 +296,7 @@ def main() -> int:
     try:
         for k in chosen:
             for f in sets[k]["files"]:
-                mid = post_image(token, user_id, RAW_BASE + f)
+                mid = post_image(token, user_id, image_url(f))
                 posted.append({"file": f, "id": mid})
                 print(f"[OK] {f} → {mid}")
                 time.sleep(5)
