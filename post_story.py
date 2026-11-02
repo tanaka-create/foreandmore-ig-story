@@ -7,6 +7,7 @@
 - 直近6投稿日に出したセットは選ばない（同じものが続かないように）
 - expires を過ぎたセット（10月キャンペーンなど）は選ばない
 - "campaign": true のセットは3投稿日に1回、優先して出す（11月キャンペーン〜）
+- "style": "uru"（うるツヤ）と白黒（style なし）を1日交代で出す（2026-11-02 本人指示）
 - 1日1回だけ出す。投稿済みかどうかは history.json で判定する
 - 途中で失敗した日は、次の起動（予備の起動）で残りの枚数だけ続きから出す
 
@@ -128,16 +129,28 @@ def check_expiry(token: str, force_notify: bool = False) -> int | None:
     return left
 
 
+def style_of(sets: dict, key: str) -> str:
+    return sets.get(key, {}).get("style", "bw")
+
+
 def pick(sets: dict, history: list, today: dt.date) -> list[str]:
     recent = {k for h in history[-AVOID_DAYS:] for k in h["sets"]}
     alive = [k for k, v in sets.items()
              if not v.get("expires") or today <= dt.date.fromisoformat(v["expires"])]
-    # キャンペーン中のセットは、直近CAMPAIGN_EVERY投稿日に出ていなければ優先して出す
-    camp_recent = {k for h in history[-(CAMPAIGN_EVERY - 1):] for k in h["sets"]}
-    camp = [k for k in alive if sets[k].get("campaign") and k not in camp_recent]
-    if camp:
-        return random.sample(camp, min(SETS_PER_DAY, len(camp)))
-    pool = [k for k in alive if k not in recent]
+    # 白黒（bw）とうるツヤ（uru）を1日交代で出す。前回が uru なら今日は bw、それ以外は uru
+    last = history[-1]["sets"][0] if history and history[-1].get("sets") else None
+    want = "bw" if last and style_of(sets, last) == "uru" else "uru"
+    # キャンペーンは、直近CAMPAIGN_EVERY投稿日にキャンペーンを出していなければ優先して出す
+    camp_recent = any(sets.get(k, {}).get("campaign") for h in history[-(CAMPAIGN_EVERY - 1):] for k in h["sets"])
+    if not camp_recent:
+        camp = [k for k in alive if sets[k].get("campaign")]
+        camp = [k for k in camp if style_of(sets, k) == want] or camp
+        if camp:
+            return random.sample(camp, min(SETS_PER_DAY, len(camp)))
+    # その日のテイストで未使用のものがなければ、テイスト問わず選ぶ
+    pool = [k for k in alive if k not in recent and style_of(sets, k) == want]
+    if len(pool) < SETS_PER_DAY:
+        pool = [k for k in alive if k not in recent]
     if len(pool) < SETS_PER_DAY:
         pool = alive
     return random.sample(pool, SETS_PER_DAY)

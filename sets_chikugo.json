@@ -143,5 +143,17 @@
   ],
   "expires": "2026-11-30",
   "campaign": true
+ },
+ "X": {
+  "title": "11月キャンペーン・レモンボトル・うるツヤ",
+  "files": [
+   "X/X1.jpg",
+   "X/X2.jpg",
+   "X/X3.jpg",
+   "X/X4.jpg"
+  ],
+  "expires": "2026-11-30",
+  "campaign": true,
+  "style": "uru"
  }
 }
