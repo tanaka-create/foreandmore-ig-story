@@ -6,6 +6,7 @@
 
 - 直近6投稿日に出したセットは選ばない（同じものが続かないように）
 - expires を過ぎたセット（10月キャンペーンなど）は選ばない
+- "campaign": true のセットは3投稿日に1回、優先して出す（11月キャンペーン〜）
 - 1日1回だけ出す。投稿済みかどうかは history.json で判定する
 - 途中で失敗した日は、次の起動（予備の起動）で残りの枚数だけ続きから出す
 
@@ -51,6 +52,7 @@ CDN_ROOT = "https://cdn.jsdelivr.net/gh/tanaka-create/foreandmore-ig-story@{sha}
 POST_HOUR = 6          # 6:00 JST に出す
 SETS_PER_DAY = 1  # 2026-10-02 本人指示で2→1セットに変更
 AVOID_DAYS = 6         # 直近6投稿日に出したセットは避ける
+CAMPAIGN_EVERY = 3     # "campaign": true のセットは3投稿日に1回（週2回ほど）出す
 LATEST_HOUR = 12       # cron が大幅に遅れてもこの時刻を過ぎたら出さない
 
 
@@ -130,6 +132,11 @@ def pick(sets: dict, history: list, today: dt.date) -> list[str]:
     recent = {k for h in history[-AVOID_DAYS:] for k in h["sets"]}
     alive = [k for k, v in sets.items()
              if not v.get("expires") or today <= dt.date.fromisoformat(v["expires"])]
+    # キャンペーン中のセットは、直近CAMPAIGN_EVERY投稿日に出ていなければ優先して出す
+    camp_recent = {k for h in history[-(CAMPAIGN_EVERY - 1):] for k in h["sets"]}
+    camp = [k for k in alive if sets[k].get("campaign") and k not in camp_recent]
+    if camp:
+        return random.sample(camp, min(SETS_PER_DAY, len(camp)))
     pool = [k for k in alive if k not in recent]
     if len(pool) < SETS_PER_DAY:
         pool = alive
