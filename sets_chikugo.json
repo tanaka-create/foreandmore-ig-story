@@ -155,5 +155,45 @@
   "expires": "2026-11-30",
   "campaign": true,
   "style": "uru"
+ },
+ "Y": {
+  "title": "うるツヤ・うるおい・ワイコ水光ピール",
+  "files": [
+   "Y/Y1.jpg",
+   "Y/Y2.jpg",
+   "Y/Y3.jpg",
+   "Y/Y4.jpg"
+  ],
+  "style": "uru"
+ },
+ "Z": {
+  "title": "うるツヤ・ハリ・サーマティノア",
+  "files": [
+   "Z/Z1.jpg",
+   "Z/Z2.jpg",
+   "Z/Z3.jpg",
+   "Z/Z4.jpg"
+  ],
+  "style": "uru"
+ },
+ "AA": {
+  "title": "うるツヤ・フェイスライン・レモンボトル",
+  "files": [
+   "AA/AA1.jpg",
+   "AA/AA2.jpg",
+   "AA/AA3.jpg",
+   "AA/AA4.jpg"
+  ],
+  "style": "uru"
+ },
+ "AB": {
+  "title": "うるツヤ・自分時間・フェイシャル",
+  "files": [
+   "AB/AB1.jpg",
+   "AB/AB2.jpg",
+   "AB/AB3.jpg",
+   "AB/AB4.jpg"
+  ],
+  "style": "uru"
  }
 }
