@@ -9,7 +9,7 @@
   ]
  },
  "D": {
-  "title": "秋の乾燥肌",
+  "title": "冬の乾燥肌",
   "files": [
    "D/D1.jpg",
    "D/D2.jpg",
@@ -36,7 +36,7 @@
   ]
  },
  "H": {
-  "title": "秋から脱毛",
+  "title": "秋冬から脱毛",
   "files": [
    "H/H1.jpg",
    "H/H2.jpg",
@@ -45,7 +45,7 @@
   ]
  },
  "J": {
-  "title": "秋バテ・水素デトックス",
+  "title": "寒暖差・水素デトックス",
   "files": [
    "J/J1.jpg",
    "J/J2.jpg",
@@ -133,17 +133,6 @@
    "V/V4.jpg"
   ]
  },
- "W": {
-  "title": "11月キャンペーン・レモンボトル",
-  "files": [
-   "W/W1.jpg",
-   "W/W2.jpg",
-   "W/W3.jpg",
-   "W/W4.jpg"
-  ],
-  "expires": "2026-11-30",
-  "campaign": true
- },
  "X": {
   "title": "11月キャンペーン・レモンボトル・うるツヤ",
   "files": [
@@ -153,47 +142,6 @@
    "X/X4.jpg"
   ],
   "expires": "2026-11-30",
-  "campaign": true,
-  "style": "uru"
- },
- "Y": {
-  "title": "うるツヤ・うるおい・ワイコ水光ピール",
-  "files": [
-   "Y/Y1.jpg",
-   "Y/Y2.jpg",
-   "Y/Y3.jpg",
-   "Y/Y4.jpg"
-  ],
-  "style": "uru"
- },
- "Z": {
-  "title": "うるツヤ・ハリ・サーマティノア",
-  "files": [
-   "Z/Z1.jpg",
-   "Z/Z2.jpg",
-   "Z/Z3.jpg",
-   "Z/Z4.jpg"
-  ],
-  "style": "uru"
- },
- "AA": {
-  "title": "うるツヤ・フェイスライン・レモンボトル",
-  "files": [
-   "AA/AA1.jpg",
-   "AA/AA2.jpg",
-   "AA/AA3.jpg",
-   "AA/AA4.jpg"
-  ],
-  "style": "uru"
- },
- "AB": {
-  "title": "うるツヤ・自分時間・フェイシャル",
-  "files": [
-   "AB/AB1.jpg",
-   "AB/AB2.jpg",
-   "AB/AB3.jpg",
-   "AB/AB4.jpg"
-  ],
-  "style": "uru"
+  "campaign": true
  }
 }
